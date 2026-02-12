@@ -68,7 +68,7 @@ export default function LoginPage() {
               <input
                 type="email"
                 className="input-field"
-                placeholder="주문 시 사용한 이메일"
+                placeholder="회원 가입시 이메일"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required

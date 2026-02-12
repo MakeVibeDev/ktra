@@ -71,6 +71,8 @@ export async function PUT(
       buyer_phone,
       buyer_gender,
       course,
+      total_amount,
+      total_participants,
       recipient_name,
       recipient_phone,
       zipcode,
@@ -78,6 +80,12 @@ export async function PUT(
       address_detail
     } = body
 
+    // 기존 참가자 수 조회
+    const currentOrder = db.prepare('SELECT total_participants FROM orders WHERE id = ?').get(id) as { total_participants: number } | undefined
+    const currentCount = currentOrder?.total_participants || 0
+    const newCount = parseInt(total_participants) || 1
+
+    // 주문 정보 업데이트
     db.prepare(`
       UPDATE orders SET
         buyer_name = ?,
@@ -85,6 +93,8 @@ export async function PUT(
         buyer_phone = ?,
         buyer_gender = ?,
         course = ?,
+        total_amount = ?,
+        total_participants = ?,
         recipient_name = ?,
         recipient_phone = ?,
         zipcode = ?,
@@ -97,6 +107,8 @@ export async function PUT(
       buyer_phone,
       buyer_gender,
       course,
+      total_amount,
+      newCount,
       recipient_name,
       recipient_phone,
       zipcode,
@@ -104,6 +116,26 @@ export async function PUT(
       address_detail,
       id
     )
+
+    // 참가자 수 변경 시 participants 테이블 동기화
+    if (newCount !== currentCount) {
+      if (newCount < currentCount) {
+        // 참가자 수 감소: 뒤에서부터 삭제 (미입력된 것 우선)
+        db.prepare(`
+          DELETE FROM participants
+          WHERE order_id = ? AND participant_index > ?
+        `).run(id, newCount)
+      } else {
+        // 참가자 수 증가: 새 참가자 레코드 추가
+        const insertStmt = db.prepare(`
+          INSERT INTO participants (order_id, participant_index, course, is_primary, is_completed)
+          VALUES (?, ?, ?, 0, 0)
+        `)
+        for (let i = currentCount + 1; i <= newCount; i++) {
+          insertStmt.run(id, i, course)
+        }
+      }
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

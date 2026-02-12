@@ -24,19 +24,88 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20')
     const offset = (page - 1) * limit
 
+    // 복수 구매자 통계 (대시보드용)
+    const multiStats = db.prepare(`
+      SELECT
+        COUNT(*) as total_buyers,
+        SUM(total_participants) as total_participants,
+        SUM(completed_count) as completed_participants
+      FROM (
+        SELECT
+          buyer_id,
+          SUM(total_participants) as total_participants,
+          (SELECT COUNT(*) FROM participants p
+           JOIN orders o2 ON p.order_id = o2.id
+           WHERE o2.buyer_id = o.buyer_id AND p.is_completed = 1) as completed_count
+        FROM orders o
+        GROUP BY buyer_id
+        HAVING SUM(total_participants) >= 2
+      )
+    `).get() as { total_buyers: number, total_participants: number, completed_participants: number }
+
+    if (filter === 'multi') {
+      // 복수 구매자 모드: buyer_id별 그룹화
+      let searchCondition = ''
+      let searchParams: string[] = []
+
+      if (search) {
+        searchCondition = `AND (buyer_name LIKE ? OR buyer_id LIKE ? OR buyer_phone LIKE ?)`
+        searchParams = [`%${search}%`, `%${search}%`, `%${search}%`]
+      }
+
+      // 복수 구매자 수 (검색 적용)
+      const countQuery = db.prepare(`
+        SELECT COUNT(*) as total FROM (
+          SELECT buyer_id
+          FROM orders
+          WHERE buyer_id IN (
+            SELECT buyer_id FROM orders GROUP BY buyer_id HAVING SUM(total_participants) >= 2
+          ) ${searchCondition}
+          GROUP BY buyer_id
+        )
+      `).get(...searchParams) as { total: number }
+
+      // buyer_id별 그룹화된 목록
+      const buyersQuery = `
+        SELECT
+          buyer_id,
+          MAX(buyer_name) as buyer_name,
+          MAX(buyer_phone) as buyer_phone,
+          MAX(buyer_gender) as buyer_gender,
+          COUNT(*) as order_count,
+          SUM(total_participants) as total_participants,
+          SUM(total_amount) as total_amount,
+          GROUP_CONCAT(DISTINCT course) as courses,
+          (SELECT COUNT(*) FROM participants p
+           JOIN orders o2 ON p.order_id = o2.id
+           WHERE o2.buyer_id = o.buyer_id AND p.is_completed = 1) as completed_count
+        FROM orders o
+        WHERE buyer_id IN (
+          SELECT buyer_id FROM orders GROUP BY buyer_id HAVING SUM(total_participants) >= 2
+        ) ${searchCondition}
+        GROUP BY buyer_id
+        ORDER BY total_participants DESC, buyer_id
+        LIMIT ? OFFSET ?
+      `
+      const buyers = db.prepare(buyersQuery).all(...searchParams, limit, offset)
+
+      return NextResponse.json({
+        mode: 'multi',
+        buyers,
+        total: countQuery.total,
+        page,
+        totalPages: Math.ceil(countQuery.total / limit),
+        stats: multiStats
+      })
+    }
+
+    // 일반 모드: 전체 주문 목록
     let whereConditions: string[] = []
     let params: any[] = []
 
     if (search) {
-      whereConditions.push(`(buyer_name LIKE ? OR buyer_email LIKE ? OR buyer_phone LIKE ?)`)
+      whereConditions.push(`(buyer_name LIKE ? OR buyer_id LIKE ? OR buyer_phone LIKE ?)`)
       params.push(`%${search}%`, `%${search}%`, `%${search}%`)
-    }
-
-    // 복수 구매자 필터 (이메일별 총 참가자 >= 2)
-    if (filter === 'multi') {
-      whereConditions.push(`buyer_email IN (
-        SELECT buyer_email FROM orders GROUP BY buyer_email HAVING SUM(total_participants) >= 2
-      )`)
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : ''
@@ -50,8 +119,8 @@ export async function GET(request: NextRequest) {
       SELECT o.*,
         (SELECT COUNT(*) FROM participants WHERE order_id = o.id) as participant_count,
         (SELECT COUNT(*) FROM participants WHERE order_id = o.id AND is_completed = 1) as completed_count,
-        (SELECT SUM(total_participants) FROM orders WHERE buyer_email = o.buyer_email) as email_total_participants,
-        (SELECT COUNT(*) FROM participants p JOIN orders o2 ON p.order_id = o2.id WHERE o2.buyer_email = o.buyer_email AND p.is_completed = 1) as email_completed_count
+        (SELECT SUM(total_participants) FROM orders WHERE buyer_id = o.buyer_id) as buyer_total_participants,
+        (SELECT COUNT(*) FROM participants p JOIN orders o2 ON p.order_id = o2.id WHERE o2.buyer_id = o.buyer_id AND p.is_completed = 1) as buyer_completed_count
       FROM orders o
       ${whereClause}
       ORDER BY o.id DESC
@@ -60,10 +129,12 @@ export async function GET(request: NextRequest) {
     const orders = db.prepare(ordersQuery).all(...params, limit, offset)
 
     return NextResponse.json({
+      mode: 'all',
       orders,
       total,
       page,
-      totalPages: Math.ceil(total / limit)
+      totalPages: Math.ceil(total / limit),
+      stats: multiStats
     })
   } catch (error) {
     console.error('Admin orders error:', error)

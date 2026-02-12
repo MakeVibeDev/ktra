@@ -234,7 +234,7 @@ function AdminOrderDetailContent() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="label">코스</label>
               <select
@@ -250,10 +250,19 @@ function AdminOrderDetailContent() {
             <div>
               <label className="label">금액</label>
               <input
-                type="text"
-                className="input-field bg-gray-50"
-                value={order.total_amount?.toLocaleString() + '원'}
-                readOnly
+                type="number"
+                className="input-field"
+                value={order.total_amount || 0}
+                onChange={(e) => handleOrderChange('total_amount', e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="label">참가자수</label>
+              <input
+                type="number"
+                className="input-field"
+                value={order.total_participants || 1}
+                onChange={(e) => handleOrderChange('total_participants', e.target.value)}
               />
             </div>
           </div>
