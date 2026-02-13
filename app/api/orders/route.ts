@@ -24,10 +24,11 @@ export async function GET() {
 
     const db = getDb()
 
-    // buyer_id 기준으로 모든 주문 조회
+    // buyer_id 기준으로 모든 주문 조회 (취소건 제외)
     const orders = db.prepare(`
       SELECT * FROM orders
       WHERE LOWER(buyer_id) = LOWER(?)
+        AND (is_cancelled = 0 OR is_cancelled IS NULL)
       ORDER BY id
     `).all(session.email) as any[]
 
@@ -48,12 +49,13 @@ export async function GET() {
       }
     })
 
-    // 전체 참가자 목록 (buyer_id 기준)
+    // 전체 참가자 목록 (buyer_id 기준, 취소건 제외)
     const allParticipants = db.prepare(`
       SELECT p.*, o.id as order_id, o.course as order_course, o.buyer_name as order_buyer_name
       FROM participants p
       JOIN orders o ON p.order_id = o.id
       WHERE LOWER(o.buyer_id) = LOWER(?)
+        AND (o.is_cancelled = 0 OR o.is_cancelled IS NULL)
       ORDER BY o.id, p.participant_index
     `).all(session.email) as any[]
 

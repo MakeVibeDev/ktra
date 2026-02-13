@@ -20,6 +20,11 @@ ssh -i /Users/gaejoon/.ssh/key-ktra-live.pem ubuntu@133.186.218.221 "cd /home/ub
 ssh -i /Users/gaejoon/.ssh/key-ktra-live.pem ubuntu@133.186.218.221
 ```
 
+### ⚠️ 배포 규칙 (필수)
+- **서버 배포 전 반드시 사용자 허락을 받을 것**
+- 라이브 서비스 운영 중이므로 신중하게 진행
+- 로컬 테스트 완료 후 배포 요청
+
 ## 프로젝트 구조
 - 로컬 경로: /Users/gaejoon/MakeVibe/Projects/ktra/ktra-form
 - GitHub: https://github.com/MakeVibeDev/ktra.git
@@ -142,3 +147,14 @@ ssh -i /Users/gaejoon/.ssh/key-ktra-live.pem ubuntu@133.186.218.221
 # scripts/add-one-order.js 수정 후 실행
 node scripts/add-one-order.js
 ```
+
+### 주문 취소 기능 (2026-02-13 추가)
+- **DB 필드**: `is_cancelled` (0/1), `cancelled_at` (timestamp)
+- **취소 시**: 금액 50% 차감 후 저장
+- **어드민**: 체크박스로 선택 후 "선택 취소" 버튼
+- **사용자 화면**: 취소된 주문은 입력 리스트에서 제외
+- **API**: `/api/admin/orders/cancel` (POST, orderIds 배열)
+
+### 로컬 DB 경로
+- `/Users/gaejoon/MakeVibe/Projects/ktra/ktra-form/data/ktra.db`
+- 작업 시 반드시 `ktra-form` 폴더에서 실행할 것

@@ -18,6 +18,7 @@ interface Order {
   completed_count: number
   buyer_total_participants: number
   buyer_completed_count: number
+  is_cancelled: number
 }
 
 interface MultiBuyer {
@@ -52,6 +53,8 @@ function AdminOrdersContent() {
   const [total, setTotal] = useState(0)
   const [stats, setStats] = useState<Stats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [selectedIds, setSelectedIds] = useState<number[]>([])
+  const [cancelling, setCancelling] = useState(false)
 
   useEffect(() => {
     fetchOrders()
@@ -110,6 +113,60 @@ function AdminOrdersContent() {
       'Half': 'bg-purple-100 text-purple-700'
     }
     return colors[course] || 'bg-gray-100 text-gray-700'
+  }
+
+  const handleSelectOrder = (orderId: number) => {
+    setSelectedIds(prev =>
+      prev.includes(orderId)
+        ? prev.filter(id => id !== orderId)
+        : [...prev, orderId]
+    )
+  }
+
+  const handleSelectAll = () => {
+    if (selectedIds.length === orders.filter(o => !o.is_cancelled).length) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(orders.filter(o => !o.is_cancelled).map(o => o.id))
+    }
+  }
+
+  const handleCancelSelected = async () => {
+    if (selectedIds.length === 0) {
+      alert('취소할 주문을 선택해주세요.')
+      return
+    }
+
+    const selectedOrders = orders.filter(o => selectedIds.includes(o.id))
+    const totalAmount = selectedOrders.reduce((sum, o) => sum + o.total_amount, 0)
+    const newAmount = Math.floor(totalAmount * 0.5)
+
+    if (!confirm(`선택한 ${selectedIds.length}건을 취소하시겠습니까?\n\n현재 금액: ${totalAmount.toLocaleString()}원\n취소 후 금액: ${newAmount.toLocaleString()}원 (50% 차감)`)) {
+      return
+    }
+
+    setCancelling(true)
+    try {
+      const res = await fetch('/api/admin/orders/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderIds: selectedIds })
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        alert(`${data.cancelled}건 취소 완료`)
+        setSelectedIds([])
+        fetchOrders()
+      } else {
+        const error = await res.json()
+        alert(error.error || '취소 실패')
+      }
+    } catch {
+      alert('취소 중 오류가 발생했습니다.')
+    } finally {
+      setCancelling(false)
+    }
   }
 
   const completionRate = stats && stats.total_participants > 0
@@ -200,12 +257,23 @@ function AdminOrdersContent() {
               <option value={200}>200개</option>
             </select>
           </div>
-          <a
-            href={`/api/admin/orders/export?filter=${filter}`}
-            className="px-4 py-2 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
-          >
-            엑셀 다운로드
-          </a>
+          <div className="flex gap-2">
+            {mode === 'all' && selectedIds.length > 0 && (
+              <button
+                onClick={handleCancelSelected}
+                disabled={cancelling}
+                className="px-4 py-2 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 transition-colors disabled:opacity-50"
+              >
+                {cancelling ? '처리중...' : `선택 취소 (${selectedIds.length}건)`}
+              </button>
+            )}
+            <a
+              href={`/api/admin/orders/export?filter=${filter}`}
+              className="px-4 py-2 rounded-lg text-sm font-medium bg-green-600 text-white hover:bg-green-700 transition-colors"
+            >
+              엑셀 다운로드
+            </a>
+          </div>
         </div>
 
         {/* 검색 */}
@@ -319,6 +387,14 @@ function AdminOrdersContent() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b">
                 <tr>
+                  <th className="px-4 py-3 text-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.length > 0 && selectedIds.length === orders.filter(o => !o.is_cancelled).length}
+                      onChange={handleSelectAll}
+                      className="w-4 h-4"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500">ID</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500">구매자</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500">이메일</th>
@@ -327,25 +403,36 @@ function AdminOrdersContent() {
                   <th className="px-4 py-3 text-left font-medium text-gray-500">참가자</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500">입력현황</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500">금액</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-500">상태</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-500"></th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={11} className="px-4 py-8 text-center text-gray-500">
                       로딩 중...
                     </td>
                   </tr>
                 ) : orders.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-gray-500">
+                    <td colSpan={11} className="px-4 py-8 text-center text-gray-500">
                       검색 결과가 없습니다.
                     </td>
                   </tr>
                 ) : (
                   orders.map((order) => (
-                    <tr key={order.id} className="hover:bg-gray-50">
+                    <tr key={order.id} className={`hover:bg-gray-50 ${order.is_cancelled ? 'bg-red-50 opacity-60' : ''}`}>
+                      <td className="px-4 py-3 text-center">
+                        {!order.is_cancelled && (
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(order.id)}
+                            onChange={() => handleSelectOrder(order.id)}
+                            className="w-4 h-4"
+                          />
+                        )}
+                      </td>
                       <td className="px-4 py-3">{order.id}</td>
                       <td className="px-4 py-3 font-medium">
                         {order.buyer_name}
@@ -376,6 +463,17 @@ function AdminOrdersContent() {
                         </span>
                       </td>
                       <td className="px-4 py-3">{order.total_amount?.toLocaleString()}원</td>
+                      <td className="px-4 py-3">
+                        {order.is_cancelled ? (
+                          <span className="px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-700">
+                            취소
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-700">
+                            정상
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">
                         <Link
                           href={`/admin/orders/${order.id}?filter=${filter}`}

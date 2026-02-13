@@ -8,6 +8,9 @@ interface Stats {
   totalOrders: number
   totalParticipants: number
   completedParticipants: number
+  multiBuyers: number
+  multiTotalParticipants: number
+  multiCompletedParticipants: number
 }
 
 export default function AdminDashboard() {
@@ -59,6 +62,43 @@ export default function AdminDashboard() {
           로그아웃
         </button>
       </div>
+
+      {/* 복수 구매자 입력 현황 대시보드 */}
+      {stats && (
+        <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 mb-8 border border-purple-100">
+          <h2 className="text-sm font-medium text-gray-600 mb-4">복수 구매자 입력 현황</h2>
+          <div className="grid grid-cols-4 gap-4">
+            <div className="bg-white rounded-lg p-4 shadow-sm">
+              <p className="text-2xl font-bold text-gray-800">{stats.multiBuyers}명</p>
+              <p className="text-xs text-gray-500">복수 구매자</p>
+            </div>
+            <div className="bg-white rounded-lg p-4 shadow-sm">
+              <p className="text-2xl font-bold text-gray-800">{stats.multiTotalParticipants}명</p>
+              <p className="text-xs text-gray-500">총 참가자</p>
+            </div>
+            <div className="bg-white rounded-lg p-4 shadow-sm">
+              <p className="text-2xl font-bold text-green-600">{stats.multiCompletedParticipants}명</p>
+              <p className="text-xs text-gray-500">입력 완료</p>
+            </div>
+            <div className="bg-white rounded-lg p-4 shadow-sm">
+              <div className="flex items-center gap-2">
+                <p className="text-2xl font-bold text-primary">
+                  {stats.multiTotalParticipants > 0
+                    ? Math.round((stats.multiCompletedParticipants / stats.multiTotalParticipants) * 100)
+                    : 0}%
+                </p>
+                <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all"
+                    style={{ width: `${stats.multiTotalParticipants > 0 ? Math.round((stats.multiCompletedParticipants / stats.multiTotalParticipants) * 100) : 0}%` }}
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500">완료율</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 통계 카드 */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
